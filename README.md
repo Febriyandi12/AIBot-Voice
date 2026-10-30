@@ -3,6 +3,7 @@
 Proyek ini adalah sistem asisten suara pintar interaktif berbasis **ESP32** yang terhubung ke server lokal/homelab melalui jaringan WiFi. Asisten memiliki kepribadian ekspresif, dapat diajak mengobrol dua arah secara otomatis (*Auto-Mic*), menyapa saat baru menyala, mengingatkan waktu setiap pergantian jam pas (`xx:00`), serta mengajak ngobrol sendiri setiap 30 detik saat dalam kondisi *standby*.
 
 ---
+# Konfigurasi untuk server nya [Config Server](Config-Server.md)
 
 ## 1. Daftar Modul & Komponen (Hardware)
 

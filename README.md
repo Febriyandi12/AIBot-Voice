@@ -45,11 +45,38 @@ Sistem ini menggunakan satu bus **I2S (`I2S_NUM_0`)** yang bergantian antara mod
 | **Kaki 1** | **GPIO 4** | Menggunakan `INPUT_PULLUP` internal (`PIN_BTN`) |
 | **Kaki 2** | **GND** | Ground (Aktif LOW saat ditekan) |
 
+### D. Display OLED 0.96" SSD1306 (I2C)
+| Pin OLED | Pin ESP32 | Keterangan |
+| :--- | :--- | :--- |
+| **VCC** | **3V3** | Jangan ke 5V |
+| **GND** | **GND** | Ground |
+| **SDA** | **GPIO 21** | `PIN_OLED_SDA` |
+| **SCL** | **GPIO 22** | `PIN_OLED_SCL` |
+
+Alamat I2C `0x3C` (`OLED_ADDR`). Kalau layar tidak terdeteksi, firmware hanya menulis `[ERR] OLED tidak terdeteksi` di Serial dan lanjut tanpa layar.
+
 ---
 
-## 3. Pengaturan pada Kode Arduino (`Voice_AI.ino`)
+## 3. Pengaturan pada Kode Arduino (`src/main.cpp`)
 
-Sebelum melakukan *upload* ke ESP32 melalui Arduino IDE, selalu periksa 4 baris konfigurasi jaringan di bagian atas kode:
+Kode firmware sekarang dibuka lewat **VS Code + PlatformIO** (bukan Arduino IDE). Struktur:
+
+```
+platformio.ini      # board, framework, daftar library
+src/main.cpp        # firmware (dulu Voice_AI.ino)
+src/emosional.h     # animasi emosional OLED
+```
+
+Library yang dipakai (di-install otomatis oleh PlatformIO, tidak perlu Library Manager):
+`Adafruit SSD1306`, `Adafruit GFX Library` (+ `Adafruit BusIO` sebagai dependensi).
+
+```bash
+pio run                 # build
+pio run -t upload       # upload ke ESP32
+pio device monitor      # Serial Monitor 115200
+```
+
+Sebelum melakukan *upload* ke ESP32, selalu periksa 4 baris konfigurasi jaringan di bagian atas kode:
 
 ```cpp
 #define WIFI_SSID   "Wifi Kamu"  // Nama WiFi kamu
@@ -65,9 +92,9 @@ Sebelum melakukan *upload* ke ESP32 melalui Arduino IDE, selalu periksa 4 baris 
 
 1. **Saat Baru Menyala (Booting):**
    * Pastikan `server.py` di PC sudah berjalan terlebih dahulu.
-   * Nyalakan ESP32. Setelah terhubung ke WiFi, ESP32 otomatis mengirim sinyal `'W'` dan speaker akan menyapa: *"Selamat datang, Tuan."*
+   * Nyalakan ESP32. Setelah terhubung ke WiFi, ESP32 otomatis mengirim sinyal `'W'` dan speaker akan menyapa: *"Halo, aku udah siap nemenin kamu. Kalau butuh ngobrol, tekan tombol untuk komunikasi ya."*
 2. **Mengajak Ngobrol Manual:**
-   * Tekan tombol pada **GPIO 4** (atau ketik karakter apa saja lalu Enter di Serial Monitor Arduino IDE).
+   * Tekan tombol pada **GPIO 4** (atau ketik karakter apa saja lalu Enter di Serial Monitor `pio device monitor`).
    * Saat muncul status `[MIC ON] Silakan bicara...`, langsung bicara ke mikrofon.
    * Berhenti bicara sejenak (~0.6 detik), server otomatis mendeteksi keheningan dan memproses jawaban.
 3. **Fitur Auto-Mic (Percakapan Dua Arah Tanpa Tombol):**

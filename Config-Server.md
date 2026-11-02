@@ -34,7 +34,8 @@ source venv/bin/activate
 
 # 4. Install semua library yang dibutuhkan di dalam venv
 pip install --upgrade pip
-pip install numpy requests faster-whisper piper-tts
+pip install -r requirements.txt
+# Atau manual: pip install numpy requests faster-whisper piper-tts edge-tts av
 ```
 
 ---
@@ -93,6 +94,19 @@ IDLE_INTERVAL = 30   # Waktu tunggu hening (dalam detik) sebelum AI bicara sendi
   * Nilai `True` di belakang berarti setelah AI selesai bicara, **mikrofon ESP32 akan otomatis menyala** untuk mendengarkan jawabanmu.
   * Nilai `False` berarti AI hanya bergumam/bernyanyi sendiri tanpa menyalakan mikrofon setelahnya.
 
+### D. Konfigurasi Suara (TTS Engine)
+Server mendukung dua mesin TTS dengan deteksi otomatis:
+1. **Edge-TTS (`id-ID-GadisNeural`) [Default]:**
+   * Menghasilkan suara perempuan muda Indonesia alami, intonasi lisan luwes dan ekspresif (bukan robot).
+   * Membutuhkan koneksi internet pada server PC (gratis, tanpa API key).
+2. **Piper TTS (`id_ID-news_tts-medium.onnx`) [Fallback]:**
+   * Mode offline lokal di RAM. Otomatis dipakai jika koneksi internet terputus atau paket `edge-tts` belum terpasang.
+* Konfigurasi di `server.py` atau environment variable:
+  ```bash
+  export TTS_ENGINE="edge"            # "edge" (suara cewek natural) atau "piper" (offline lokal)
+  export EDGE_TTS_VOICE="id-ID-GadisNeural" # Suara perempuan alternatif: "id-ID-SitiNeural"
+  ```
+
 ---
 
 ## 5. Protokol Komunikasi TCP (ESP32 <-> Server)
@@ -111,7 +125,63 @@ Sebagai pengingat cara kerja kode di balik layar:
 
 ---
 
-## 6. Troubleshooting Server Python
+## 6. Fitur Memori Persisten Otonom (`memory.json`) & Aturan Panggilan
+
+Server dilengkapi memori persisten di file `Server/memory.json` berbasis **Dual-Layer Cognitive Processing**:
+1. **Lapisan 1 (Safety-Net Heuristik Cepat):** Menangkap instruksi lisan fleksibel langsung di server sebelum LLM berjalan (termasuk toleransi typo fonetik STT Whisper seperti *"tuanya"*, *"Tuhan"*, *"pengen gil"*).
+2. **Lapisan 2 (Ekstraksi Kognitif Otonom LLM):** Model Ollama menganalisis maksud ucapan user secara bebas, mengekstrak blok terstruktur `<<<MEMORY_UPDATE>>>`, memperbarui `memory.json`, lalu menjawab secara natural tanpa template kaku.
+
+### A. Format `memory.json`
+```json
+{
+  "user_name": "Febri",
+  "call_sign": "Febri",
+  "forbid_tuan": true,
+  "custom_suffix": "bos",
+  "custom_wake_reply": "Iya Febri ada apa, ada yang bisa Bymax bantu?",
+  "facts": [
+    "alamat rumah di Bandung",
+    "suka kopi tubruk"
+  ],
+  "reminders": [
+    {
+      "time": "15:59",
+      "task": "mandi",
+      "date": "2026-11-01",
+      "notified": false
+    }
+  ]
+}
+```
+
+### B. Perintah Suara & Pengenalan Fleksibel
+* **Pengenalan Nama & Larangan "Tuan":**
+  * Ucapan: *"Tolong ingat namanya, ya itu Febri"*, *"namaku Febri"*, *"nama saya Budi"*, *"kenalin aku Andi"*
+  * Efek: Bot mengingat nama. **MUTLAK DILARANG memanggil "Tuan"** begitu nama user sudah dikenalkan atau dilarang.
+* **Toleransi Typo STT Lisan:**
+  * Ucapan: *"Jadi jangan panggil tuanya"*, *"Baymax, jangan panggil Tuhan, panggil namah saja"*, *"Ingat dalam memori mu, jangan pengen gil tuan"*
+  * Efek: Otomatis mengaktifkan flag `forbid_tuan = true` dan menghentikan sapaan "Tuan" di seluruh titik sistem.
+* **Jadwal Pengingat Aktif (Active Reminder Scheduler) & Toleransi Typo Waktu:**
+  * Ucapan: *"Baymax ingatkan saya jam 15.5.9 untuk melakukan mandi"*, *"ingatkan aku jam 16:30 jemput adik"*, *"ingatkan 10 menit lagi matikan kompor"*
+  * Efek: Otomatis memetakan format waktu typo Whisper (`15.5.9` -> `15:59`) atau durasi relatif ("N menit lagi") ke skema aktif `reminders`. Saat menit tiba, server polling memprioritaskan peringatan ini di atas sapaan lainnya.
+* **Penutupan Sesi Toleran Typo Fonetik Whisper:**
+  * Ucapan: *"Hentikan saya sih ini"*, *"Hentikan CSE ini"*, *"Matikan sesi ini"*, *"sesion mati"*, *"stop ngobrol"*
+  * Efek: Otomatis mengakhiri sesi percakapan tanpa bingung atau bertanya kaku.
+* **Kustomisasi Respon Saat Dipanggil (Wake Reply):**
+  * Ucapan: *"kalau saya panggil jangan jawab iya tuan, tapi iya febri ada apa, ada yang bisa Bymax bantu"*
+  * Efek: Menyimpan teks ke `custom_wake_reply` dan digunakan setiap kali kata panggil Bymax diucapkan.
+* **Panggilan Bebas / Santai & Imbuhan Akhir:**
+  * Ucapan: *"panggil aku bro"*, *"kasih imbuhan di akhir kalimat dengan bos"*, *"pakai imbuhan dong ah"*
+  * Efek: Bot hanya boleh memanggil sebutan santai (*bro*, *bos*, dll) dan imbuhan jika **secara eksplisit diminta user dan tersimpan di memori**.
+* **Catatan / Fakta Bebas:**
+  * Ucapan: *"ingat alamat rumah saya di Bandung jalan merdeka nomor 5"*
+  * Efek: Disimpan ke daftar `facts` dan disuntikkan ke konteks percakapan.
+* **Reset Memori:**
+  * Ucapan: *"hapus semua memori"*, *"reset memori"*
+
+---
+
+## 7. Troubleshooting Server Python
 
 1. **`ModuleNotFoundError: No module named 'faster_whisper'`:**
    * Kamu lupa menjalankan `source venv/bin/activate` sebelum mengeksekusi `python3 server.py`.

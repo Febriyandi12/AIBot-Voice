@@ -1,0 +1,13 @@
+{
+  "user_name": null,
+  "call_sign": null,
+  "forbid_tuan": false,
+  "custom_suffix": null,
+  "custom_wake_reply": null,
+  "facts": [],
+  "reminders": [],
+  "volume": 50,
+  "muted": false,
+  "last_volume": 50,
+  "current_radio": "iradio"
+}

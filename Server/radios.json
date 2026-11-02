@@ -1,0 +1,58 @@
+[
+  {
+    "id": "dmi",
+    "name": "Dengerin Musik Indonesia (DMI)",
+    "aliases": ["dmi", "musik indonesia", "pop indonesia", "lagu pop", "pop", "musik", "lagu"],
+    "url": "http://stream.denger.in:8888/dmi",
+    "genre": "Pop Indonesia"
+  },
+  {
+    "id": "elshinta",
+    "name": "Elshinta FM Jakarta",
+    "aliases": ["elshinta", "elshinta fm", "berita", "news", "kabar"],
+    "url": "https://stream-ssl.arenastreaming.com:8000/jakarta",
+    "genre": "Berita & Informasi"
+  },
+  {
+    "id": "sonora",
+    "name": "Sonora FM Jakarta",
+    "aliases": ["sonora", "sonora fm"],
+    "url": "https://sonora-radio.arenastreaming.com/8130/stream",
+    "genre": "Berita & Musik"
+  },
+  {
+    "id": "iradio",
+    "name": "I-Radio Jakarta",
+    "aliases": ["iradio", "i-radio", "i radio", "radio indonesia"],
+    "url": "http://stream.radiojar.com/4ywdgup3bnzuv",
+    "genre": "Pop Indonesia"
+  },
+  {
+    "id": "suarasurabaya",
+    "name": "Suara Surabaya FM",
+    "aliases": ["suara surabaya", "ssfm", "surabaya", "radio surabaya"],
+    "url": "https://c5.siar.us/proxy/ssfm/stream",
+    "genre": "Informasi & Musik"
+  },
+  {
+    "id": "campursari",
+    "name": "Campursari FM",
+    "aliases": ["campursari", "campur sari", "jawa", "gamelan"],
+    "url": "https://a8.siar.us/listen/campursari/stream",
+    "genre": "Campursari & Budaya"
+  },
+  {
+    "id": "dangdut",
+    "name": "Mettaswara Dangdut Koplo",
+    "aliases": ["dangdut", "koplo", "mettaswara", "dangdutan"],
+    "url": "https://mettaswara.com:8700/d4d",
+    "genre": "Dangdut & Koplo"
+  },
+  {
+    "id": "goldenhits",
+    "name": "Golden Hits FM",
+    "aliases": ["golden hits", "nostalgia", "lagu lawas", "jadul", "tembang kenangan", "kenangan"],
+    "url": "https://i.klikhost.com:9134/stream",
+    "genre": "Lagu Nostalgia / Lawas"
+  }
+]

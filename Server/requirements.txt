@@ -1,0 +1,7 @@
+# Dependencies for AIBot-Voice Server
+faster-whisper
+piper-tts
+edge-tts
+av
+requests
+numpy

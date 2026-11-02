@@ -101,10 +101,15 @@ Sebelum melakukan *upload* ke ESP32, selalu periksa 4 baris konfigurasi jaringan
    * Setiap kali AI selesai menjawab dan kalimatnya mengandung pertanyaan (flag `'L'`), kamu **tidak perlu menekan tombol lagi**.
    * Tunggu hingga speaker selesai bicara (`[SPEAKER OFF]`), maka mikrofon akan otomatis menyala kembali (`[MIC ON]`).
    * Jika kamu tidak ingin menjawab lagi, cukup diam saja sampai *mic* mati sendiri, lalu sistem akan kembali ke mode *Standby*.
-4. **Fitur Sapaan Otomatis (Standby 30 Detik & Jam Pas):**
-   * Saat kondisi hening (*Standby*), biarkan perangkat menyala tanpa menekan tombol.
-   * Setelah 30 detik hening penuh sejak interaksi terakhir, AI akan otomatis bicara sendiri sesuai *mood* acak (manja, lapar, sedih, bernyanyi, atau bertanya kabar) dan langsung menyalakan mikrofon untuk mendengar jawabanmu.
-   * Setiap pergantian jam tepat di menit `:00` (misal 04:00, 05:00, 13:00), AI akan otomatis memberi tahu waktu saat ini.
+   4.  **Mode Panggil (Wake Word "sayang"):**
+     * Saat *standby*, AI secara aktif memantau suara lewat mic (deteksi volume/RMS). Ucapkan kata **"sayang"** (bisa juga "sayank" atau "sa yang") untuk memanggil AI tanpa menyentuh tombol.
+     * Kata "saya" **tidak** akan memicu (contoh: "saya mau makan" tidak akan memanggil AI).
+     * Jika kata panggil terdeteksi, AI akan menjawab, lalu menyempatkan bertanya sekali: *"Ada yang perlu dibantu lagi?"*
+     * Jawab "ya" untuk satu giliran tambahan, atau "tidak/udah" untuk mengakhiri sesi dan kembali *standby*.
+   5.  **Fitur Sapaan Otomatis (Standby 30 Detik & Jam Pas):**
+     * Saat kondisi hening (*Standby*), biarkan perangkat menyala tanpa menekan tombol.
+     * Setelah 30 detik hening penuh sejak interaksi terakhir, AI akan otomatis bicara sendiri sesuai *mood* acak (manja, lapar, sedih, bernyanyi, atau bertanya kabar) dan langsung menyalakan mikrofon untuk mendengar jawabanmu.
+     * Setiap pergantian jam tepat di menit `:00` (misal 04:00, 05:00, 13:00), AI akan otomatis memberi tahu waktu saat ini.
 
 ---
 

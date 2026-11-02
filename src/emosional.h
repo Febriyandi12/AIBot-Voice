@@ -1,12 +1,56 @@
 #pragma once
 // ===================== ANIMASI EMOSIONAL STANDBY =====================
 // Layar penuh, non-blocking (berbasis waktu millis), tanpa gambar bitmap.
-// Pakai file ini dengan #include "emosional.h" di Lala-AI.ino, tepat SEBELUM
-// handleStandbyState(). Ia memakai: display, Note, playSequence(), currentState,
-// stateDuration, lastStateChange dan STATE_SCENE (sudah ada / ditambah di .ino).
+// Berisi: driver SSD1306, scene emosional standby, faceDraw lip-sync, dan FreeRTOS uiTask.
+
+#include <Arduino.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include <math.h>
 
 #define C_W SSD1306_WHITE
 #define C_B SSD1306_BLACK
+
+Adafruit_SSD1306 display(128, 64, &Wire, -1, 800000UL, 800000UL);
+
+// Status eksternal dari main.cpp
+extern volatile bool sleepMode;
+extern volatile bool autoTalkEnabled;
+
+// ---- FreeRTOS UI State & Mode ----
+enum UiMode : uint8_t {
+  UI_BOOT_WAKE = 0,
+  UI_STANDBY,
+  UI_LISTENING,
+  UI_THINKING,
+  UI_TALKING,
+  UI_SLEEP,
+  UI_AUTO_STATUS,
+  UI_HOLD_3S,
+  UI_RADIO_ON
+};
+
+static volatile UiMode uiMode = UI_BOOT_WAKE;
+static volatile int    uiLevel = 0;
+static unsigned long   uiStateMs = 0;
+
+static void setUiMode(UiMode m, int lvl = 0) {
+  uiLevel = lvl;
+  if (uiMode != m) {
+    uiStateMs = millis();
+    uiMode = m;
+  }
+}
+
+// ---- Glue Animasi Emosional Standby ----
+enum { STATE_IDLE, STATE_SCENE };
+static uint8_t currentState = STATE_IDLE;
+static unsigned long stateDuration = 0;
+static unsigned long lastStateChange = 0;
+
+struct Note { uint16_t f; uint16_t ms; };
+static void playSequence(const Note *, int) {} // ponytail: melodi no-op sampai ada buzzer di pin bebas
 
 enum {
   SC_ANJING, SC_PUSING, SC_KAGET, SC_BERSIN, SC_JOGET, SC_TAKUT,
@@ -472,5 +516,442 @@ void startScene() {
       break;
     }
   }
+}
+
+// Animasi khusus saat perangkat baru menyala (boot): baru bangun tidur (~4.2 detik)
+static void drawBootWakeUp(unsigned long t) {
+  display.clearDisplay();
+  if (t < 1300) {
+    // Fase 1 (0.0 - 1.3s): Tidur pulas (mata terpejam, gelembung tidur, huruf Zzz)
+    display.fillRoundRect(22, 32, 28, 4, 2, C_W);
+    display.fillRoundRect(78, 32, 28, 4, 2, C_W);
+    int br = 4 + (int)((sinf(t / 220.0f) + 1.0f) * 5.0f);
+    display.drawCircle(72 + br / 2, 46 - br / 2, br, C_W);
+    display.drawPixel(70 + br, 43 - br, C_W);
+    display.fillCircle(60, 52, 2, C_W);
+    for (int i = 0; i < 3; i++) {
+      int zy = 50 - (int)((t / 24 + i * 15) % 44);
+      int zx = 102 + i * 7;
+      int sz = 4 + i * 2;
+      display.drawLine(zx, zy, zx + sz, zy, C_W);
+      display.drawLine(zx + sz, zy, zx, zy + sz, C_W);
+      display.drawLine(zx, zy + sz, zx + sz, zy + sz, C_W);
+    }
+  } else if (t < 2600) {
+    // Fase 2 (1.3 - 2.6s): Gelembung pecah, menguap lebar ('O') & badan menggeliat
+    unsigned long u = t - 1300;
+    int sy = (int)(sinf(u / 180.0f) * 3);
+    int sx = (int)(sinf(u / 110.0f) * 2);
+    for (int o = 0; o < 2; o++) { // mata merem rapat > < saat menguap
+      display.drawLine(24 + sx, 24 + sy + o, 46 + sx, 31 + sy + o, C_W);
+      display.drawLine(46 + sx, 31 + sy + o, 24 + sx, 38 + sy + o, C_W);
+      display.drawLine(104 + sx, 24 + sy + o, 82 + sx, 31 + sy + o, C_W);
+      display.drawLine(82 + sx, 31 + sy + o, 104 + sx, 38 + sy + o, C_W);
+    }
+    int mr = (u < 650) ? (3 + (int)(u * 9 / 650)) : (12 - (int)((u - 650) * 8 / 650));
+    if (mr < 3) mr = 3;
+    display.fillCircle(64 + sx, 50 + sy, mr, C_W);
+    display.fillCircle(64 + sx, 50 + sy, mr - 2, C_B);
+    if (u < 280) { // percikan balon tidur pecah
+      for (int i = 0; i < 5; i++) {
+        float a = i * 1.25f;
+        int r = 6 + (int)(u / 25);
+        display.drawPixel(76 + (int)(cosf(a) * r), 42 + (int)(sinf(a) * r), C_W);
+      }
+    }
+  } else if (t < 3500) {
+    // Fase 3 (2.6 - 3.5s): Mata membuka pelan tapi masih sayu + berkedip 2x
+    unsigned long u = t - 2600;
+    bool blink = (u > 220 && u < 340) || (u > 560 && u < 680);
+    int h = blink ? 3 : 14;
+    display.fillRoundRect(22, 32 - h / 2, 28, h, 5, C_W);
+    display.fillRoundRect(78, 32 - h / 2, 28, h, 5, C_W);
+    if (!blink) {
+      display.fillCircle(36, 33, 4, C_B);
+      display.fillCircle(92, 33, 4, C_B);
+      display.fillRect(20, 22, 32, 6, C_B); // kelopak atas masih berat/sayu
+      display.fillRect(76, 22, 32, 6, C_B);
+      display.drawLine(22, 28, 50, 28, C_W);
+      display.drawLine(78, 28, 106, 28, C_W);
+    }
+    display.drawLine(58, 52, 70, 52, C_W);
+  } else {
+    // Fase 4 (3.5 - 4.2s): Bangun segar! Mata bulat besar berkilau + senyum ceria
+    display.fillRoundRect(20, 16, 30, 30, 10, C_W);
+    display.fillRoundRect(78, 16, 30, 30, 10, C_W);
+    display.fillCircle(35, 31, 6, C_B);
+    display.fillCircle(93, 31, 6, C_B);
+    display.fillCircle(32, 27, 2, C_W);
+    display.fillCircle(90, 27, 2, C_W);
+    for (int i = 0; i < 3; i++) { // rona pipi
+      display.drawLine(12 + i * 4, 48, 15 + i * 4, 44, C_W);
+      display.drawLine(104 + i * 4, 48, 107 + i * 4, 44, C_W);
+    }
+    for (int x = -12; x <= 12; x++) { // senyum
+      int y = 50 + (6 - (x * x) / 24);
+      display.drawPixel(64 + x, y, C_W);
+      display.drawPixel(64 + x, y + 1, C_W);
+    }
+  }
+  display.display();
+}
+
+static void playBootWakeUp() {
+  unsigned long start = millis();
+  while (millis() - start < 4200) {
+    drawBootWakeUp(millis() - start);
+    delay(30);
+  }
+}
+
+// Wajah ekspresif & hidup saat mendengar (talking=false) dan berbicara dengan lip-sync (talking=true)
+static void faceDraw(bool talking, int level = 0) {
+  unsigned long t = millis();
+  display.clearDisplay();
+
+  // Gerakan halus kepala & lirikan mata supaya organik (tidak kaku seperti robot)
+  int swayX = (int)(sinf(t / 420.0f) * 2.0f);
+  int bobY  = (int)(cosf(t / 340.0f) * 1.5f);
+  bool blink = ((t % 2900) < 130); // Kedip alami tiap ~2.9 detik
+
+  int lx = 22 + swayX, rx = 80 + swayX;
+  int ey = 16 + bobY;
+
+  if (talking) {
+    // Alis ekspresif ikut terangkat saat suara AI tinggi
+    int browLift = (level > 5) ? 2 : 0;
+    display.drawLine(lx + 2, ey - 4 - browLift, lx + 22, ey - 6 - browLift, C_W);
+    display.drawLine(rx + 4, ey - 6 - browLift, rx + 24, ey - 4 - browLift, C_W);
+
+    if (blink) {
+      // Mata terpejam melengkung manis saat berkedip
+      for (int o = 0; o < 2; o++) {
+        display.drawLine(lx + 2,  ey + 13 + o, lx + 13, ey + 8 + o, C_W);
+        display.drawLine(lx + 13, ey + 8 + o,  lx + 24, ey + 13 + o, C_W);
+        display.drawLine(rx + 2,  ey + 13 + o, rx + 13, ey + 8 + o, C_W);
+        display.drawLine(rx + 13, ey + 8 + o,  rx + 24, ey + 13 + o, C_W);
+      }
+    } else if (level > 6) {
+      // Mata menyipit senang (antusias) saat berbicara vokal tinggi (^ ^)
+      for (int o = 0; o < 3; o++) {
+        display.drawLine(lx + 2,  ey + 18 + o, lx + 13, ey + 7 + o, C_W);
+        display.drawLine(lx + 13, ey + 7 + o,  lx + 24, ey + 18 + o, C_W);
+        display.drawLine(rx + 2,  ey + 18 + o, rx + 13, ey + 7 + o, C_W);
+        display.drawLine(rx + 13, ey + 7 + o,  rx + 24, ey + 18 + o, C_W);
+      }
+    } else {
+      // Mata bulat ekspresif + pupil hidup + pantulan cahaya (sparkle)
+      display.fillRoundRect(lx, ey, 26, 25, 9, C_W);
+      display.fillRoundRect(rx, ey, 26, 25, 9, C_W);
+      int px = (int)(sinf(t / 550.0f) * 2.0f);
+      display.fillCircle(lx + 14 + px, ey + 13, 5, C_B);
+      display.fillCircle(rx + 12 + px, ey + 13, 5, C_B);
+      display.fillCircle(lx + 11 + px, ey + 10, 2, C_W); // kilau mata utama
+      display.fillCircle(rx + 9 + px,  ey + 10, 2, C_W);
+      display.drawPixel(lx + 17 + px,  ey + 16, C_W);     // kilau kecil kedua
+      display.drawPixel(rx + 15 + px,  ey + 16, C_W);
+    }
+
+    // Rona pipi manis (blush)
+    display.drawLine(13 + swayX,  43 + bobY, 18 + swayX,  41 + bobY, C_W);
+    display.drawLine(17 + swayX,  44 + bobY, 22 + swayX,  42 + bobY, C_W);
+    display.drawLine(106 + swayX, 42 + bobY, 111 + swayX, 44 + bobY, C_W);
+    display.drawLine(110 + swayX, 41 + bobY, 115 + swayX, 43 + bobY, C_W);
+
+    // Mulut Lip-Sync mengikuti amplitudo suara AI (level 0..12)
+    int mx = 64 + swayX, my = 50 + bobY;
+    if (level <= 1) {
+      // Senyum tipis bergaris halus
+      for (int x = -7; x <= 7; x++) {
+        display.drawPixel(mx + x, my + (x * x) / 22, C_W);
+        display.drawPixel(mx + x, my + 1 + (x * x) / 22, C_W);
+      }
+    } else if (level <= 5) {
+      // Mulut membuka oval proporsional
+      int mw = 12 + level;
+      int mh = 4 + level;
+      display.fillRoundRect(mx - mw / 2, my - mh / 2, mw, mh, mh / 2, C_W);
+      display.fillRoundRect(mx - mw / 2 + 2, my - mh / 2 + 2, mw - 4, mh - 4, (mh - 4) / 2, C_B);
+      display.fillCircle(mx, my + mh / 2 - 2, 3, C_W);
+    } else {
+      // Vokal lantang: mulut 'D' terbuka ceria + lidah di bawah
+      int r = 7 + (level > 10 ? 4 : (level - 5));
+      display.fillCircle(mx, my - 2, r, C_W);
+      display.fillRect(mx - r - 1, my - r - 3, 2 * r + 3, r, C_B);
+      display.fillCircle(mx, my + r - 5, r / 2, C_B);
+      display.drawLine(mx - r, my - 2, mx + r, my - 2, C_W);
+    }
+  } else {
+    // Mode Mendengarkan (MIC ON): animasi aktif menyimak + gelombang radar telinga (( )) + spektrum equalizer
+    int lookX = (int)(sinf(t / 450.0f) * 2.0f);
+    int tiltY = (int)(cosf(t / 550.0f) * 1.5f);
+    // Alis penasaran menyimak (kiri naik antusias, kanan fokus)
+    display.drawLine(lx + 2, ey - 6 + tiltY, lx + 20, ey - 9 + tiltY, C_W);
+    display.drawLine(lx + 2, ey - 5 + tiltY, lx + 20, ey - 8 + tiltY, C_W);
+    display.drawLine(rx + 6, ey - 8 - tiltY, rx + 24, ey - 5 - tiltY, C_W);
+
+    if (blink) {
+      display.drawLine(lx + 2, ey + 13, lx + 24, ey + 13, C_W);
+      display.drawLine(rx + 2, ey + 13, rx + 24, ey + 13, C_W);
+    } else {
+      display.fillRoundRect(lx, ey + tiltY, 26, 25, 9, C_W);
+      display.fillRoundRect(rx, ey - tiltY, 26, 25, 9, C_W);
+      display.fillCircle(lx + 13 + lookX, ey + 12 + tiltY, 6, C_B);
+      display.fillCircle(rx + 13 + lookX, ey + 12 - tiltY, 6, C_B);
+      display.fillCircle(lx + 10 + lookX, ey + 9 + tiltY, 2, C_W);
+      display.fillCircle(rx + 10 + lookX, ey + 9 - tiltY, 2, C_W);
+    }
+
+    // Gelombang radar di sisi kiri & kanan (visual telinga aktif menyimak suara user)
+    int wavePhase = (t / 180) % 3;
+    int activeWaves = (level > 5) ? 3 : ((level > 1) ? 2 : (wavePhase + 1));
+    for (int w = 0; w < activeWaves; w++) {
+      int dx = w * 4;
+      int h = 5 + w * 3 + (level > 0 ? (level / 2) : 0);
+      if (h > 16) h = 16;
+      display.drawLine(14 - dx, 25 - h, 11 - dx, 25, C_W);
+      display.drawLine(11 - dx, 25,     14 - dx, 25 + h, C_W);
+      display.drawLine(114 + dx, 25 - h, 117 + dx, 25, C_W);
+      display.drawLine(117 + dx, 25,     114 + dx, 25 + h, C_W);
+    }
+
+    // Mulut menyimak
+    int mx = 64 + swayX, my = 46 + bobY;
+    if (level > 1) {
+      int r = 3 + (level > 8 ? 3 : level / 3);
+      display.fillCircle(mx, my, r, C_W);
+      display.fillCircle(mx, my, r - 2, C_B);
+    } else {
+      for (int x = -6; x <= 6; x++) {
+        display.drawPixel(mx + x, my + (x * x) / 18, C_W);
+      }
+    }
+
+    // Equalizer 7-bar gelombang suara mic di bagian bawah layar (y = 55..63)
+    for (int b = 0; b < 7; b++) {
+      int bx = 40 + b * 8;
+      int animH = 2 + (int)(fabsf(sinf((t / 110.0f) + b * 0.9f)) * (2.5f + level * 0.8f));
+      if (animH > 9) animH = 9;
+      display.fillRect(bx, 63 - animH, 4, animH, C_W);
+    }
+  }
+  display.display();
+}
+
+// Animasi Kaset Radio Berputar (Tape Cassette Reel Animation)
+static void drawCassetteTape(int level) {
+  display.clearDisplay();
+
+  // 1. Cangkang Kaset (Outer Cassette Shell)
+  display.drawRoundRect(16, 2, 96, 46, 4, C_W);
+  display.drawPixel(20, 5, C_W);
+  display.drawPixel(107, 5, C_W);
+  display.drawPixel(20, 44, C_W);
+  display.drawPixel(107, 44, C_W);
+
+  // 2. Head Guide Trapesium bawah
+  display.drawLine(34, 48, 42, 40, C_W);
+  display.drawLine(42, 40, 86, 40, C_W);
+  display.drawLine(86, 40, 94, 48, C_W);
+  display.drawPixel(50, 44, C_W);
+  display.drawPixel(78, 44, C_W);
+
+  // 3. Area Label Kaset
+  display.drawRect(24, 6, 80, 31, C_W);
+  display.drawLine(24, 14, 103, 14, C_W);
+  display.setTextSize(1);
+  display.setTextColor(C_W);
+  display.setCursor(38, 7);
+  display.print(F("RADIO FM"));
+
+  // 4. Jendela Pita Kaset Tengah
+  display.drawRect(52, 17, 24, 14, C_W);
+  display.drawLine(48, 30, 80, 30, C_W);
+
+  // 5. Dua Roda Kumparan Kaset (Tape Spools)
+  int cx1 = 42, cx2 = 86, cy = 24;
+  display.drawCircle(cx1, cy, 7, C_W);
+  display.drawCircle(cx2, cy, 7, C_W);
+  display.drawCircle(cx1, cy, 2, C_W);
+  display.drawCircle(cx2, cy, 2, C_W);
+
+  // Ruji berputar (Rotating Spool Teeth)
+  float angle = (millis() % 1000) * (2.0 * PI / 1000.0);
+  for (int i = 0; i < 3; i++) {
+    float a = angle + i * (2.0 * PI / 3.0);
+    int dx = (int)(cos(a) * 5.0);
+    int dy = (int)(sin(a) * 5.0);
+    display.drawLine(cx1, cy, cx1 + dx, cy + dy, C_W);
+    display.drawLine(cx2, cy, cx2 + dx, cy + dy, C_W);
+  }
+
+  // 6. Indikator Audio Equalizer di sisi kiri & kanan
+  int barH = level;
+  if (barH > 8) barH = 8;
+  if (barH > 0) {
+    display.fillRect(5, 42 - barH * 4, 4, barH * 4, C_W);
+    display.fillRect(119, 42 - barH * 4, 4, barH * 4, C_W);
+  }
+
+  // 7. Status Teks Navigasi Bawah
+  display.setTextSize(1);
+  display.setCursor(16, 54);
+  display.print(F("1x:CH 2x:V- 3x:V+"));
+
+  display.display();
+}
+
+// Animasi emosional non-blocking saat standby
+static unsigned long lastScene = 0;
+static void sceneTick() {
+  if (millis() - sceneStart >= stateDuration) startScene();
+  if (millis() - lastScene < 70) return;
+  lastScene = millis();
+  sceneDraw();
+}
+
+// FreeRTOS Task khusus OLED
+static void uiTask(void *pv) {
+  bool oledOff = false;
+  UiMode lastMode = UI_BOOT_WAKE;
+  startScene();
+  for (;;) {
+    UiMode m = uiMode;
+    if (m != lastMode) {
+      if (oledOff && m != UI_SLEEP) {
+        display.ssd1306_command(SSD1306_DISPLAYON);
+        oledOff = false;
+      }
+      if (m == UI_STANDBY) {
+        startScene();
+      } else if (m == UI_THINKING) {
+        sceneId = SC_MIKIR;
+        sceneStart = millis();
+      } else if (m == UI_SLEEP) {
+        sceneId = SC_NGANTUK;
+        sceneStart = millis();
+      }
+      lastMode = m;
+    }
+
+    switch (m) {
+      case UI_BOOT_WAKE: {
+        unsigned long elapsed = millis() - uiStateMs;
+        if (elapsed < 4200) {
+          drawBootWakeUp(elapsed);
+          vTaskDelay(30 / portTICK_PERIOD_MS);
+        } else {
+          setUiMode(sleepMode ? UI_SLEEP : UI_STANDBY);
+        }
+        break;
+      }
+      case UI_STANDBY:
+        sceneTick();
+        vTaskDelay(25 / portTICK_PERIOD_MS);
+        break;
+      case UI_LISTENING:
+        faceDraw(false, uiLevel);
+        vTaskDelay(45 / portTICK_PERIOD_MS);
+        break;
+      case UI_THINKING:
+        sceneDraw();
+        vTaskDelay(60 / portTICK_PERIOD_MS);
+        break;
+      case UI_TALKING:
+        faceDraw(true, uiLevel);
+        vTaskDelay(40 / portTICK_PERIOD_MS);
+        break;
+      case UI_SLEEP:
+        // Tampilkan ekspresi ngantuk Zzz 1.5 detik lalu matikan panel OLED untuk hemat daya
+        if (millis() - uiStateMs < 1500) {
+          sceneDraw();
+          vTaskDelay(60 / portTICK_PERIOD_MS);
+        } else {
+          if (!oledOff) {
+            display.clearDisplay();
+            display.display();
+            display.ssd1306_command(SSD1306_DISPLAYOFF);
+            oledOff = true;
+          }
+          vTaskDelay(100 / portTICK_PERIOD_MS);
+        }
+        break;
+      case UI_AUTO_STATUS:
+        if (millis() - uiStateMs < 1800) {
+          display.clearDisplay();
+          display.drawRoundRect(4, 8, 120, 48, 6, C_W);
+          display.setTextSize(1);
+          display.setTextColor(C_W);
+          display.setCursor(18, 18);
+          display.print(F("AUTO NGOMONG 1M:"));
+          display.setTextSize(2);
+          display.setCursor(autoTalkEnabled ? 40 : 34, 34);
+          display.print(autoTalkEnabled ? F("ON") : F("OFF"));
+          display.display();
+          vTaskDelay(80 / portTICK_PERIOD_MS);
+        } else {
+          setUiMode(sleepMode ? UI_SLEEP : UI_STANDBY);
+        }
+        break;
+      case UI_HOLD_3S: {
+        display.clearDisplay();
+        display.drawRoundRect(2, 2, 124, 60, 6, C_W);
+        display.setTextSize(1);
+        display.setTextColor(C_W);
+
+        unsigned long held = millis() - uiStateMs;
+
+        if (held < 3000) {
+          display.setCursor(8, 8);
+          display.print(F("TAHAN TOMBOL:"));
+          display.setCursor(8, 20);
+          display.print(F("3s = Auto 1M"));
+          display.setCursor(8, 32);
+          display.print(F("5s = Mode SLEEP"));
+        } else if (held < 5000) {
+          display.setCursor(8, 8);
+          display.print(F(">>> 3 DETIK! <<<"));
+          display.setCursor(8, 20);
+          display.print(F("Lepas: Auto 1M"));
+          display.setCursor(8, 32);
+          display.print(F("Tahan terus: SLEEP"));
+        } else {
+          display.setCursor(22, 14);
+          display.setTextSize(2);
+          display.print(F("SLEEP..."));
+          display.setTextSize(1);
+        }
+
+        // Progress bar di bawah (0..5000ms)
+        display.drawRect(8, 46, 112, 10, C_W);
+        // Garis batas 3s pada bar (3000 / 5000 * 108 = ~65px)
+        display.drawLine(8 + 65, 44, 8 + 65, 57, C_W);
+        int barW = (int)((held > 5000 ? 5000 : held) * 108 / 5000);
+        if (barW > 0) display.fillRect(10, 48, barW, 6, C_W);
+
+        display.display();
+        vTaskDelay(40 / portTICK_PERIOD_MS);
+        break;
+      }
+
+      case UI_RADIO_ON: {
+        drawCassetteTape(uiLevel);
+        vTaskDelay(45 / portTICK_PERIOD_MS);
+        break;
+      }
+    }
+  }
+}
+
+static bool uiInit(int sda = 21, int scl = 22, uint8_t addr = 0x3C) {
+  Wire.begin(sda, scl);
+  Wire.setClock(800000);
+  if (!display.begin(SSD1306_SWITCHCAPVCC, addr)) {
+    Serial.println(F("[ERR] OLED tidak terdeteksi, lanjut tanpa layar"));
+    return false;
+  }
+  uiStateMs = millis();
+  uiMode = UI_BOOT_WAKE;
+  return true;
 }
 
